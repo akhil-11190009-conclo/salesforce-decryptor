@@ -12,8 +12,6 @@ const pinoPrettyStream = process.env.NODE_ENV !== 'production'
 const fastify = require('fastify')({
   logger: {
     level: 'debug',
-    // If pinoPrettyStream is available, use it as the destination for logs
-    // Otherwise, pino will log to stdout directly (useful for production without pretty printing)
     stream: pinoPrettyStream || process.stdout // Direct logs to pino-pretty stream or stdout
   }
 });
@@ -25,8 +23,8 @@ const CONFIG = {
   PRIVATE_KEY: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'), // Private key string for Java
   AES_ALGORITHM: 'aes-256-cbc',
   IV_LENGTH: 16, // AES-256-CBC always uses a 16-byte IV
-  // UPDATED: Use the absolute path to your Java executable
- JAVA_EXECUTABLE_PATH: '/usr/bin/java' // Change this line in your server.js
+  // Use the absolute path to your Java executable
+  JAVA_EXECUTABLE_PATH: 'C:\\Program Files\\Zulu\\zulu-19\\bin\\java.exe' // Make sure this is YOUR correct path
 };
 
 /**
@@ -113,10 +111,10 @@ try {
   process.exit(1); // Exit if the private key is not correctly configured
 }
 
-// Register Swagger documentation plugins
+// --- START: Swagger Registration ---
+// Register Swagger plugin
 fastify.register(require('@fastify/swagger'), {
   exposeRoute: true,
-  routePrefix: '/documentation',
   swagger: {
     info: {
       title: 'Salesforce Decryption Microservice',
@@ -126,18 +124,21 @@ fastify.register(require('@fastify/swagger'), {
     host: `localhost:${CONFIG.PORT}`,
     schemes: ['http'],
     consumes: ['application/json'],
-    produces: ['application/json']
+    produces: ['application/json'],
   }
 });
 
+// Register Swagger UI plugin
 fastify.register(require('@fastify/swagger-ui'), {
-  routePrefix: '/documentation',
+  routePrefix: '/documentation', // This is the URL where Swagger UI will be served
   uiConfig: {
     docExpansion: 'full'
   }
 });
+// --- END: Swagger Registration ---
 
-// Decryption endpoint
+
+// Decryption endpoint - This should be defined AFTER Swagger is registered
 fastify.post('/decrypt', {
   schema: {
     body: {
@@ -191,12 +192,13 @@ fastify.post('/decrypt', {
     fastify.log.debug('Spawning Java process for RSA key decryption...');
     const javaProcess = spawn(CONFIG.JAVA_EXECUTABLE_PATH, ['rsa_decryptor']);
 
-    let decryptedKeyBase64 = '';
+    let decryptedKeyBase64 = ''; // Correct variable name
+
     let javaStderr = '';
 
     // Capture Java stdout (decrypted key)
     javaProcess.stdout.on('data', (data) => {
-      decryptedKeyBase64 += data.toString();
+      decryptedKeyBase64 += data.toString(); // <--- FIXED HERE (was decryptedKeyBase66)
     });
 
     // Capture Java stderr (error messages)

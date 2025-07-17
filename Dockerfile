@@ -2,10 +2,11 @@
 # This image already includes Node.js and npm
 FROM node:18
 
-# Install Java Development Kit (JDK) 11
+# Install Java Development Kit (JDK)
 # apt-get update refreshes the package list
-# apt-get install -y installs openjdk-11-jdk without asking for confirmation
-RUN apt-get update && apt-get install -y openjdk-11-jdk
+# Use 'default-jdk' which is a more generic package name that should resolve
+# to a compatible JDK version (e.g., OpenJDK 11, 17, or newer)
+RUN apt-get update && apt-get install -y default-jdk
 
 # Set the working directory inside the container
 # All subsequent commands will be executed relative to this directory
