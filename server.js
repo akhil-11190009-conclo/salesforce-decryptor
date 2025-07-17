@@ -2,11 +2,16 @@ require('dotenv').config();
 const fastify = require('fastify')({
   logger: {
     level: 'debug',
-    // Only use pino-pretty for pretty printing in non-production environments
+    // Use pino-pretty only in development
     ...(process.env.NODE_ENV !== 'production' && {
       transport: {
-        target: 'pino-pretty'
-      },
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname'
+        }
+      }
     }),
   }
 });
@@ -17,7 +22,9 @@ const CONFIG = {
   PORT: process.env.PORT || 3000,
   PRIVATE_KEY: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'), // Private key string for Java
   AES_ALGORITHM: 'aes-256-cbc',
-  IV_LENGTH: 16 // AES-256-CBC always uses a 16-byte IV
+  IV_LENGTH: 16, // AES-256-CBC always uses a 16-byte IV
+  // Rely on 'java' being in the system's PATH when not using Docker
+  JAVA_EXECUTABLE_PATH: 'java' // Changed from '/usr/bin/java'
 };
 
 /**
@@ -82,7 +89,7 @@ const handleDecryptionError = (error, fastify) => {
         message: 'The decrypted data is not a valid JSON string. Ensure the original payload was JSON.',
         details: error.message
       }
-    };
+    }
   }
 
   // Catch-all for any other unexpected errors
@@ -114,7 +121,6 @@ fastify.register(require('@fastify/swagger'), {
       description: 'Decrypts AES key (RSA/ECB/PKCS1Padding in Java) and payload (AES-256-CBC in Node.js)',
       version: '1.0.0'
     },
-    // Dynamically set host for Render deployment if needed, otherwise localhost
     host: `localhost:${CONFIG.PORT}`,
     schemes: ['http'],
     consumes: ['application/json'],
@@ -181,7 +187,8 @@ fastify.post('/decrypt', {
   try {
     // 1. Call Java process to decrypt the AES key using RSA/ECB/PKCS1Padding
     fastify.log.debug('Spawning Java process for RSA key decryption...');
-    const javaProcess = spawn('java', ['rsa_decryptor']); // Assumes rsa_decryptor.class is compiled and in PATH/CWD
+    // Use 'java' as the command, relying on it being in the system's PATH
+    const javaProcess = spawn(CONFIG.JAVA_EXECUTABLE_PATH, ['rsa_decryptor']);
 
     let decryptedKeyBase64 = '';
     let javaStderr = '';
