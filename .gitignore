@@ -1,0 +1,15 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-debug.log
+
+# Environment variables
+.env
+
+# Private keys (if you generated them directly in the project root)
+private_key.pem
+public_key.pem
+
+# OS generated files
+.DS_Store
+.vscode/
