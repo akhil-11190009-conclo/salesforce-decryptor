@@ -27,7 +27,7 @@ const CONFIG = {
   // This path depends on your execution environment:
   // - For Windows local: 'C:\\Program Files\\Zulu\\zulu-19\\bin\\java.exe'
   // - For Docker/Render (Linux): '/usr/bin/java'
-  JAVA_EXECUTABLE_PATH: '/usr/bin/java' // <--- Set this based on where you are running (local Docker or Render)
+  JAVA_EXECUTABLE_PATH: 'java'
 };
 
 /**
