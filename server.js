@@ -39,7 +39,14 @@ fastify.register(require('@fastify/swagger-ui'), {
   transformSpecificationClone: true
 });
 
-const PRIVATE_KEY_PEM = process.env.PRIVATE_KEY;
+const decryptedSymmetricKey = crypto.privateDecrypt(
+      {
+        key: PRIVATE_KEY_PEM,
+        padding: crypto.constants.RSA_PKCS1_PADDING, // <== CHANGED THIS LINE
+        // Removed: oaepHash: 'sha256'
+      },
+      Buffer.from(encryptedKey, 'base64')
+    );
 
 if (!PRIVATE_KEY_PEM || PRIVATE_KEY_PEM.trim().length < 100) {
   fastify.log.error('PRIVATE_KEY environment variable is missing or too short. Please set it securely.');
@@ -91,14 +98,11 @@ fastify.post('/decrypt', {
     // CHANGED: Using RSA_PKCS1_OAEP_PADDING instead of RSA_PKCS1_PADDING
     // If the original encryption used PKCS1_PADDING, this will fail.
     // The sender's encryption method MUST match this padding.
-    const decryptedSymmetricKey = crypto.privateDecrypt(
+const decryptedSymmetricKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY_PEM,
-        // Use OAEP padding. You might need to specify hash (e.g., 'sha256')
-        // if the sender used a specific hash with OAEP.
-        // For 'NONE' in your sample, PKCS1_OAEP_PADDING is the secure replacement.
-        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: 'sha256' // Common default for OAEP, or match sender's hash
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, // <== THIS LINE
+        oaepHash: 'sha256' // <== THIS LINE
       },
       Buffer.from(encryptedKey, 'base64')
     );
