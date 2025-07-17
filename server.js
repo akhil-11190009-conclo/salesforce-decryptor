@@ -25,8 +25,8 @@ const CONFIG = {
   PRIVATE_KEY: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'), // Private key string for Java
   AES_ALGORITHM: 'aes-256-cbc',
   IV_LENGTH: 16, // AES-256-CBC always uses a 16-byte IV
-  // Rely on 'java' being in the system's PATH when not using Docker
-  JAVA_EXECUTABLE_PATH: 'java'
+  // UPDATED: Use the absolute path to your Java executable
+ JAVA_EXECUTABLE_PATH: '/usr/bin/java' // Change this line in your server.js
 };
 
 /**
@@ -189,7 +189,6 @@ fastify.post('/decrypt', {
   try {
     // 1. Call Java process to decrypt the AES key using RSA/ECB/PKCS1Padding
     fastify.log.debug('Spawning Java process for RSA key decryption...');
-    // Use 'java' as the command, relying on it being in the system's PATH
     const javaProcess = spawn(CONFIG.JAVA_EXECUTABLE_PATH, ['rsa_decryptor']);
 
     let decryptedKeyBase64 = '';
