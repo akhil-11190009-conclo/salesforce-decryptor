@@ -1,18 +1,20 @@
 require('dotenv').config();
+
+// Conditionally require pino-pretty if not in production and create the pretty stream
+const pinoPrettyStream = process.env.NODE_ENV !== 'production'
+  ? require('pino-pretty')({
+      colorize: true, // Enable colorized output
+      translateTime: 'SYS:HH:MM:ss Z', // Format timestamp
+      ignore: 'pid,hostname' // Ignore common fields for cleaner output
+    })
+  : null; // In production, don't use pino-pretty
+
 const fastify = require('fastify')({
   logger: {
     level: 'debug',
-    // Use pino-pretty only in development
-    ...(process.env.NODE_ENV !== 'production' && {
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname'
-        }
-      }
-    }),
+    // If pinoPrettyStream is available, use it as the destination for logs
+    // Otherwise, pino will log to stdout directly (useful for production without pretty printing)
+    stream: pinoPrettyStream || process.stdout // Direct logs to pino-pretty stream or stdout
   }
 });
 const crypto = require('crypto');
@@ -24,7 +26,7 @@ const CONFIG = {
   AES_ALGORITHM: 'aes-256-cbc',
   IV_LENGTH: 16, // AES-256-CBC always uses a 16-byte IV
   // Rely on 'java' being in the system's PATH when not using Docker
-  JAVA_EXECUTABLE_PATH: 'java' // Changed from '/usr/bin/java'
+  JAVA_EXECUTABLE_PATH: 'java'
 };
 
 /**
