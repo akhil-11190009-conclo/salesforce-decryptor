@@ -1,25 +1,21 @@
-// server.js
-
-// Load environment variables from .env file (for local development)
 require('dotenv').config();
-
 const fastify = require('fastify')({
-  logger: true // Enable logging for requests
+  logger: true
 });
-const crypto = require('crypto'); // Node.js built-in crypto module
+const crypto = require('crypto');
 
-// Register Fastify Swagger for API documentation (optional, but good practice)
+// Swagger configuration
 fastify.register(require('@fastify/swagger'), {
   exposeRoute: true,
   routePrefix: '/documentation',
   swagger: {
     info: {
       title: 'Salesforce Decryption Microservice',
-      description: 'API for decrypting RSA-encrypted data from Salesforce.',
+      description: 'API for decrypting RSA-encrypted data from Salesforce using RSA/ECB/PKCS1Padding',
       version: '1.0.0'
     },
-    host: 'localhost:3000', // This will be overridden by Render's URL in production
-    schemes: ['http'], // Use https in production (Render handles this)
+    host: 'localhost:3000',
+    schemes: ['http'],
     consumes: ['application/json'],
     produces: ['application/json'],
   }
@@ -31,28 +27,15 @@ fastify.register(require('@fastify/swagger-ui'), {
     docExpansion: 'full',
     deepLinking: false
   },
-  uiHooks: {
-    onRequest: function (request, reply, next) { next() },
-    preHandler: function (request, reply, next) { next() }
-  },
-  staticCSP: true,
-  transformStaticCSP: (header) => header,
-  transformSpecification: (swaggerObject, request, reply) => { return swaggerObject },
-  transformSpecificationClone: true
+  staticCSP: true
 });
 
+// Validate private key on startup
+const PRIVATE_KEY_PEM = process.env.PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-// --- IMPORTANT: RSA PRIVATE KEY CONFIGURATION ---
-// The private key is loaded from the PRIVATE_KEY environment variable.
-// For local testing, this comes from the .env file.
-// For Render deployment, this comes from Render's Config Vars.
-// This constant MUST be defined at the top level of the module.
-const PRIVATE_KEY_PEM = process.env.PRIVATE_KEY;
-
-// Basic validation for the private key
-if (!PRIVATE_KEY_PEM || PRIVATE_KEY_PEM.trim().length < 100) {
-  fastify.log.error('PRIVATE_KEY environment variable is missing or too short. Please set it securely in .env (local) or Render Config Vars (production).');
-  process.exit(1); // Exit if key is not set for security
+if (!PRIVATE_KEY_PEM || !PRIVATE_KEY_PEM.includes('-----BEGIN PRIVATE KEY-----')) {
+  fastify.log.error('Invalid PRIVATE_KEY environment variable. Must be a valid PEM-formatted private key.');
+  process.exit(1);
 }
 
 // Decryption endpoint
@@ -60,23 +43,36 @@ fastify.post('/decrypt', {
   schema: {
     body: {
       type: 'object',
-      required: ['encryptedKey', 'encryptedData', 'iv'],
+      required: ['encryptedKey', 'encryptedData'],
       properties: {
         requestId: { type: 'string' },
         service: { type: 'string' },
-        encryptedKey: { type: 'string', description: 'RSA encrypted symmetric key (e.g., AES key)' },
-        encryptedData: { type: 'string', description: 'Symmetric encrypted data payload' },
-        oaepHashingAlgorithm: { type: 'string', default: 'NONE', description: 'Hashing algorithm for OAEP padding (ignored if PKCS1)' },
-        iv: { type: 'string', description: 'Initialization Vector for symmetric decryption' },
+        encryptedKey: { 
+          type: 'string', 
+          description: 'RSA encrypted symmetric key (using RSA/ECB/PKCS1Padding)' 
+        },
+        encryptedData: { 
+          type: 'string', 
+          description: 'AES-256-CBC encrypted data payload' 
+        },
+        oaepHashingAlgorithm: { 
+          type: 'string', 
+          default: 'NONE', 
+          description: 'Ignored (using PKCS1 padding)' 
+        },
+        iv: { 
+          type: 'string', 
+          default: '', 
+          description: 'Initialization Vector for AES decryption (if empty, uses zero IV)' 
+        },
         clientInfo: { type: 'string' },
         optionalParam: { type: 'string' }
       }
     },
     response: {
       200: {
-        type: 'object', // Assuming the decrypted data is a JSON object
+        type: 'object',
         description: 'Successfully decrypted plain request data'
-        // You might want to define the exact schema of your Plain Request here
       },
       400: {
         type: 'object',
@@ -95,63 +91,73 @@ fastify.post('/decrypt', {
     }
   }
 }, async (request, reply) => {
-  const { encryptedKey, encryptedData, iv, oaepHashingAlgorithm } = request.body;
+  const { encryptedKey, encryptedData, iv } = request.body;
 
   try {
-    // Step 1: Decrypt the symmetric key using the RSA private key
-    // Using RSA_PKCS1_PADDING for compatibility with older Node.js versions
-    // and potentially the sender's encryption method.
-    // This requires Node.js 18 or older on Render.
+    // 1. Decrypt the AES key using RSA with PKCS1 padding
     const decryptedSymmetricKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY_PEM,
-        padding: crypto.constants.RSA_PKCS1_PADDING, // Reverted to PKCS1 padding
+        padding: crypto.constants.RSA_PKCS1_PADDING
       },
       Buffer.from(encryptedKey, 'base64')
     );
 
-    // Step 2: Decrypt the main data payload using the decrypted symmetric key and IV
-    // Assuming AES-256-CBC, which is a common and secure choice with an IV.
-    // The encryptedData and IV are typically Base64 encoded.
-    // IMPORTANT: If 'iv' is an empty string in the incoming request, this will likely fail.
-    // A proper IV is required for AES-256-CBC.
+    // 2. Prepare IV (use zero-filled buffer if not provided)
+    const ivBuffer = iv 
+      ? Buffer.from(iv, 'base64') 
+      : Buffer.alloc(16); // 16 zero bytes for AES-256-CBC
+
+    // 3. Decrypt the data using AES-256-CBC
     const decipher = crypto.createDecipheriv(
       'aes-256-cbc',
       decryptedSymmetricKey,
-      Buffer.from(iv, 'base64')
+      ivBuffer
     );
 
     let decryptedData = decipher.update(encryptedData, 'base64', 'utf8');
     decryptedData += decipher.final('utf8');
 
+    // 4. Parse and return the decrypted JSON
     const plainRequest = JSON.parse(decryptedData);
-
     reply.send(plainRequest);
 
   } catch (error) {
-    fastify.log.error('Decryption error:', error.message);
-    if (error.code === 'ERR_OSSL_RSA_PRIVKEY_DECRYPT' || error.message.includes('padding') || error.message.includes('data greater than mod len')) {
-        reply.status(400).send({ error: 'DecryptionFailed', message: 'RSA private key decryption failed. Check key, padding (expected PKCS1), or encryptedKey format. Error: ' + error.message });
-    } else if (error.code === 'ERR_OSSL_EVP_DECRYPT_NOT_INITIALIZED' || error.code === 'ERR_OSSL_EVP_DECRYPT_FINAL' || error.message.includes('bad decrypt') || error.message.includes('invalid iv')) {
-        reply.status(400).send({ error: 'DecryptionFailed', message: 'Symmetric decryption failed. Check key, IV (must not be empty for CBC), or encryptedData format. Error: ' + error.message });
-    } else if (error.name === 'SyntaxError') {
-        reply.status(400).send({ error: 'InvalidJsonFormat', message: 'Decrypted data is not valid JSON. Error: ' + error.message });
+    fastify.log.error('Decryption error:', error);
+    
+    if (error.code === 'ERR_OSSL_RSA_PRIVKEY_DECRYPT') {
+      reply.status(400).send({ 
+        error: 'RSA_DECRYPTION_FAILED', 
+        message: 'Failed to decrypt symmetric key. Check private key or encrypted key format.' 
+      });
+    } else if (error.code === 'ERR_OSSL_EVP_BAD_DECRYPT') {
+      reply.status(400).send({ 
+        error: 'AES_DECRYPTION_FAILED', 
+        message: 'Failed to decrypt data. Check symmetric key, IV, or encrypted data format.' 
+      });
+    } else if (error instanceof SyntaxError) {
+      reply.status(400).send({ 
+        error: 'INVALID_JSON', 
+        message: 'Decrypted data is not valid JSON.' 
+      });
     } else {
-        reply.status(500).send({ error: 'InternalServerError', message: error.message });
+      reply.status(500).send({ 
+        error: 'INTERNAL_ERROR', 
+        message: 'An unexpected error occurred during decryption.' 
+      });
     }
   }
 });
 
-// Start the server
+// Start server
 const start = async () => {
   try {
-    // Render assigns a PORT environment variable dynamically
     const port = process.env.PORT || 3000;
-    await fastify.listen({ port: port, host: '0.0.0.0' }); // Listen on all interfaces
-    fastify.log.info(`Server listening on port ${fastify.server.address().port}`);
-    fastify.log.info(`Swagger documentation available at http://localhost:${port}/documentation`);
+    await fastify.listen({ port, host: '0.0.0.0' });
+    fastify.log.info(`Server listening on port ${port}`);
+    fastify.log.info(`Swagger UI available at http://localhost:${port}/documentation`);
   } catch (err) {
-    fastify.log.error(err);
+    fastify.log.error('Server startup error:', err);
     process.exit(1);
   }
 };
