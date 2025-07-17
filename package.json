@@ -14,7 +14,7 @@
     "rsa",
     "aes"
   ],
-  "author": "",
+  "author": "Sample",
   "license": "ISC",
   "engines": {
     "node": ">=18.x"
