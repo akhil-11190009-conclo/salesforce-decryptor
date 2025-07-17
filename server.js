@@ -8,9 +8,6 @@ const fastify = require('fastify')({
 const crypto = require('crypto');
 const path = require('path');
 
-// =============================================
-// Configuration
-// =============================================
 const CONFIG = {
   PORT: process.env.PORT || 3000,
   PRIVATE_KEY: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -19,9 +16,6 @@ const CONFIG = {
   IV_LENGTH: 16 // bytes for AES-256-CBC
 };
 
-// =============================================
-// Helper Functions
-// =============================================
 const validatePrivateKey = (key) => {
   if (!key) throw new Error('PRIVATE_KEY environment variable is missing');
   if (!key.includes('-----BEGIN PRIVATE KEY-----')) {
@@ -65,11 +59,6 @@ const handleDecryptionError = (error, fastify) => {
   };
 };
 
-// =============================================
-// Server Setup
-// =============================================
-
-// Validate configuration on startup
 try {
   CONFIG.PRIVATE_KEY = validatePrivateKey(CONFIG.PRIVATE_KEY);
 } catch (error) {
@@ -101,9 +90,6 @@ fastify.register(require('@fastify/swagger-ui'), {
   }
 });
 
-// =============================================
-// Decryption Endpoint
-// =============================================
 fastify.post('/decrypt', {
   schema: {
     body: {
@@ -190,16 +176,9 @@ fastify.post('/decrypt', {
   }
 });
 
-// =============================================
-// Health Check Endpoint
-// =============================================
 fastify.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
-
-// =============================================
-// Start Server
-// =============================================
 const start = async () => {
   try {
     await fastify.listen({ 
