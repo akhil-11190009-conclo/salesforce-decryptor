@@ -23,8 +23,8 @@ const CONFIG = {
   PRIVATE_KEY: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'), // Private key string for Java
   AES_ALGORITHM: 'aes-256-cbc',
   IV_LENGTH: 16, // AES-256-CBC always uses a 16-byte IV
-  // Use the absolute path to your Java executable
-  JAVA_EXECUTABLE_PATH: 'C:\\Program Files\\Zulu\\zulu-19\\bin\\java.exe' // Make sure this is YOUR correct path
+  // Use the absolute path to your Java executablenpm install && javac rsa_decryptor.java
+  JAVA_EXECUTABLE_PATH: '/usr/bin/java' // Make sure this is YOUR correct path
 };
 
 /**
